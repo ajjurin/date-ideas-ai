@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useDeferredValue } from 'react'
 import './App.css'
-import { getRecommendations } from './services/ollama'
+import { getRecommendations } from './services/recommendations'
 
 function App() {
   const [jsonDates, setJsonDates] = useState([])
@@ -15,6 +15,7 @@ function App() {
   const [chatQuery, setChatQuery] = useState('')
   const [chatResponse, setChatResponse] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('ask')
   const [formData, setFormData] = useState({
     title: '',
     summary: '',
@@ -29,6 +30,9 @@ function App() {
 
   // Merge JSON dates with custom dates
   const dates = [...jsonDates, ...customDates]
+
+  // Defer search query for better typing responsiveness
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
   // Load data
   useEffect(() => {
@@ -105,8 +109,12 @@ function App() {
     
     try {
       const response = await getRecommendations(chatQuery, dates)
+      console.log('📥 Raw AI Response:', response)
+      console.log('📥 Response type:', typeof response)
+      console.log('📥 Response length:', response?.length)
       setChatResponse(response)
     } catch (error) {
+      console.error('❌ Error getting recommendations:', error)
       setChatResponse(`Error: ${error.message}`)
     } finally {
       setIsLoading(false)
@@ -117,6 +125,209 @@ function App() {
   const clearChat = () => {
     setChatQuery('')
     setChatResponse('')
+  }
+
+  // Render a date card component
+  const renderDateCard = (date) => (
+    <div 
+      key={date.id} 
+      className="bg-white rounded-lg shadow-md border border-gray-100 p-5 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex flex-col"
+    >
+      {/* Seasonal Event Warning Banner */}
+      {date.ai?.seasonal?.isEvent === true && (
+        <div className="bg-orange-50 text-orange-600 border-b border-orange-100 p-2 mb-2 rounded-t-lg -mx-5 -mt-5 px-5">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span>⚠️</span>
+            <span>{date.ai?.seasonal?.eventNotes || 'Seasonal Event - Verify current dates'}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Title */}
+      <h2 className="text-lg font-bold mb-2 text-gray-900 leading-tight">{date.ai?.title || 'Untitled'}</h2>
+      
+      {/* Summary */}
+      <p className="text-gray-500 mb-3 text-sm leading-relaxed flex-grow">{date.ai?.summary || ''}</p>
+      
+      {/* Categories */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {(date.ai?.categories || []).map(cat => (
+          <span 
+            key={cat} 
+            className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-xs font-normal"
+          >
+            {cat}
+          </span>
+        ))}
+      </div>
+      
+      {/* Location & Cost */}
+      <div className="flex items-center gap-3 mb-3 text-xs text-gray-400 border-t border-gray-100 pt-3">
+        <span>{date.ai?.location?.city || ''}, {date.ai?.location?.state || ''}</span>
+        <span>•</span>
+        <span>{date.ai?.cost?.level || ''}</span>
+      </div>
+      
+      {/* Buttons */}
+      <div className="flex items-center justify-between mt-auto gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => toggleFavorite(date.id)}
+            className={`transition-all duration-200 hover:scale-110 ${
+              favorites.includes(date.id)
+                ? 'text-[#ED4956]'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+            title={favorites.includes(date.id) ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <span className="text-2xl">
+              {favorites.includes(date.id) ? '♥' : '♡'}
+            </span>
+          </button>
+          
+          <button
+            onClick={() => toggleComplete(date.id)}
+            className={`transition-all duration-200 hover:scale-110 ${
+              completed.includes(date.id)
+                ? 'text-[#10B981]'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+            title={completed.includes(date.id) ? 'Mark as incomplete' : 'Mark as complete'}
+          >
+            <span className="text-2xl">
+              {completed.includes(date.id) ? '✓' : '○'}
+            </span>
+          </button>
+        </div>
+        
+        {date.url && date.url.trim() && (
+          <a
+            href={date.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-1.5 rounded-full text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-1.5"
+            title="View on Instagram"
+          >
+            <span>📷</span>
+            <span>Instagram</span>
+          </a>
+        )}
+      </div>
+    </div>
+  )
+
+  // Parse and render AI response
+  const renderAIResponse = () => {
+    if (!chatResponse) {
+      console.log('🔍 renderAIResponse: No chatResponse')
+      return null
+    }
+
+    console.log('🔍 renderAIResponse: chatResponse type:', typeof chatResponse)
+    console.log('🔍 renderAIResponse: chatResponse value:', chatResponse)
+    
+    // If it's already an object, use it directly
+    let parsedResponse
+    if (typeof chatResponse === 'object' && chatResponse !== null) {
+      console.log('✅ chatResponse is already an object')
+      parsedResponse = chatResponse
+    } else if (typeof chatResponse === 'string') {
+      console.log('🔍 renderAIResponse: chatResponse is string, length:', chatResponse.length)
+      console.log('🔍 renderAIResponse: First 200 chars:', chatResponse.substring(0, 200))
+      
+      // Try to parse as JSON
+      try {
+        parsedResponse = JSON.parse(chatResponse)
+        console.log('✅ Successfully parsed as JSON:', parsedResponse)
+      } catch (e) {
+        console.log('⚠️ Not valid JSON, treating as plain text. Error:', e.message)
+        // Not JSON, treat as plain text
+        return (
+          <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+            {chatResponse}
+          </div>
+        )
+      }
+    } else {
+      console.log('⚠️ Unexpected chatResponse type, treating as plain text')
+      return (
+        <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+          {String(chatResponse)}
+        </div>
+      )
+    }
+
+    console.log('✅ Parsed response keys:', Object.keys(parsedResponse))
+
+    // Check if it's an error response
+    if (parsedResponse.error) {
+      console.log('❌ Error response detected:', parsedResponse.error)
+      return (
+        <div className="text-red-600 leading-relaxed whitespace-pre-wrap">
+          {parsedResponse.error}
+        </div>
+      )
+    }
+
+    // Check if it has recommendations
+    if (parsedResponse.recommendations && Array.isArray(parsedResponse.recommendations)) {
+      console.log('✨ Recommendations array found, length:', parsedResponse.recommendations.length)
+      console.log('✨ Recommendations:', parsedResponse.recommendations)
+      console.log('✨ Available dates count:', dates.length)
+      console.log('✨ Sample date IDs:', dates.slice(0, 5).map(d => d.id))
+
+      return (
+        <div className="space-y-6">
+          {/* Intro message */}
+          {parsedResponse.message && (
+            <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {parsedResponse.message}
+            </div>
+          )}
+
+          {/* Recommendations section */}
+          <div>
+            <h4 className="text-xl font-semibold text-gray-900 mb-4">✨ AI Recommendations</h4>
+            <div className="space-y-6">
+              {parsedResponse.recommendations.map((rec, index) => {
+                console.log(`🔍 Looking for date with ID: "${rec.id}" (index: ${index})`)
+                const date = dates.find(d => d.id === rec.id)
+                console.log(`   Found date:`, date ? `YES - ${date.ai?.title}` : 'NO')
+                
+                if (!date) {
+                  console.warn(`⚠️ Date not found for ID: "${rec.id}"`)
+                  return null
+                }
+
+                return (
+                  <div key={rec.id || index} className="space-y-3">
+                    {/* Date Card */}
+                    {renderDateCard(date)}
+                    
+                    {/* AI Reasoning */}
+                    {rec.reason && (
+                      <div className="ml-2 pl-4 border-l-4 border-blue-200">
+                        <p className="text-sm text-gray-600 italic leading-relaxed">
+                          {rec.reason}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Fallback: display as plain text if structure doesn't match
+    console.log('⚠️ Structure doesn\'t match expected format. Keys:', Object.keys(parsedResponse))
+    return (
+      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+        {chatResponse}
+      </div>
+    )
   }
 
   // Handle form submission
@@ -204,9 +415,9 @@ function App() {
       return false
     }
     
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
+    // Apply search filter (using deferred value for better performance)
+    if (deferredSearchQuery.trim()) {
+      const query = deferredSearchQuery.toLowerCase().trim()
       const title = date.ai?.title?.toLowerCase() || ''
       const summary = date.ai?.summary?.toLowerCase() || ''
       const city = date.ai?.location?.city?.toLowerCase() || ''
@@ -232,18 +443,49 @@ function App() {
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-center gap-4 mb-2">
             <h1 className="text-4xl font-bold text-gray-900">Date Ideas AI</h1>
-            <button
-              onClick={() => setShowModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-md"
-            >
-              + Add Date
-            </button>
+            {activeTab === 'browse' && (
+              <button
+                onClick={() => setShowModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-md"
+              >
+                + Add Date
+              </button>
+            )}
           </div>
           <p className="text-center text-gray-600">{dates.length} curated date ideas</p>
         </div>
       </header>
 
+      {/* Tab Navigation */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-center gap-2 py-3">
+            <button
+              onClick={() => setActiveTab('ask')}
+              className={`px-6 py-2 rounded-full font-medium transition-all duration-200 ${
+                activeTab === 'ask'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Ask AI 🤖
+            </button>
+            <button
+              onClick={() => setActiveTab('browse')}
+              className={`px-6 py-2 rounded-full font-medium transition-all duration-200 ${
+                activeTab === 'browse'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Browse Dates 📋
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* AI Chat Interface */}
+      {activeTab === 'ask' && (
       <div className="bg-white border-b border-gray-200 py-6">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto">
@@ -290,16 +532,18 @@ function App() {
                       Clear
                     </button>
                   </div>
-                  <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                    {chatResponse}
-                  </div>
+                  {renderAIResponse()}
                 </div>
               )}
             </form>
           </div>
         </div>
       </div>
+      )}
 
+      {/* Browse Dates Section */}
+      {activeTab === 'browse' && (
+      <>
       {/* Search Bar */}
       <div className="bg-white border-b border-gray-200 py-4">
         <div className="container mx-auto px-4">
@@ -579,80 +823,12 @@ function App() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredDates.map(date => (
-            <div 
-              key={date.id} 
-              className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-2xl transition-all duration-300 flex flex-col"
-            >
-              {/* Seasonal Event Warning Banner */}
-              {date.ai?.seasonal?.isEvent === true && (
-                <div className="bg-orange-50 text-orange-700 border-b border-orange-200 p-3 mb-3 rounded-t-xl -mx-6 -mt-6 px-6">
-                  <div className="flex items-center gap-2 text-xs font-medium">
-                    <span>⚠️</span>
-                    <span>{date.ai?.seasonal?.eventNotes || 'Seasonal Event - Verify current dates'}</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Title */}
-              <h2 className="text-xl font-bold mb-3 text-gray-900 leading-tight">{date.ai?.title || 'Untitled'}</h2>
-              
-              {/* Summary */}
-              <p className="text-gray-600 mb-4 text-sm leading-relaxed flex-grow">{date.ai.summary}</p>
-              
-              {/* Categories */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                {date.ai.categories.map(cat => (
-                  <span 
-                    key={cat} 
-                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium"
-                  >
-                    {cat}
-                  </span>
-                ))}
-              </div>
-              
-              {/* Location & Cost */}
-              <div className="flex items-center gap-4 mb-4 text-sm text-gray-500 border-t border-gray-100 pt-4">
-                <span className="flex items-center gap-1">
-                  <span>📍</span>
-                  <span>{date.ai.location.city}, {date.ai.location.state}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span>💰</span>
-                  <span>{date.ai.cost.level}</span>
-                </span>
-              </div>
-              
-              {/* Buttons */}
-              <div className="flex gap-2 mt-auto">
-                <button
-                  onClick={() => toggleFavorite(date.id)}
-                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 ${
-                    favorites.includes(date.id)
-                      ? 'bg-yellow-400 text-white hover:bg-yellow-500 shadow-md'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  {favorites.includes(date.id) ? '⭐ Favorited' : '☆ Favorite'}
-                </button>
-                
-                <button
-                  onClick={() => toggleComplete(date.id)}
-                  className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 ${
-                    completed.includes(date.id)
-                      ? 'bg-green-500 text-white hover:bg-green-600 shadow-md'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  {completed.includes(date.id) ? '✓ Done' : 'Complete'}
-                </button>
-              </div>
-            </div>
-            ))}
+            {filteredDates.map(date => renderDateCard(date))}
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }

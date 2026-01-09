@@ -4,6 +4,8 @@ import cors from 'cors'
 
 console.log('API Key loaded:', process.env.ANTHROPIC_API_KEY ? 'YES' : 'NO')
 console.log('First 10 chars:', process.env.ANTHROPIC_API_KEY?.substring(0, 10))
+console.log('Weather API Key loaded:', process.env.WEATHER_API_KEY ? 'YES' : 'NO')
+console.log('Weather API Key first 10 chars:', process.env.WEATHER_API_KEY?.substring(0, 10))
 
 const app = express()
 app.use(cors())
@@ -37,6 +39,20 @@ app.post('/api/recommend', async (req, res) => {
     res.status(500).json({ error: error.message })
   }
 })
+
+app.get('/api/weather', async (req, res) => {
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?q=Princeton,NJ,US&units=imperial&appid=${process.env.WEATHER_API_KEY}`
+      )
+      
+      const data = await response.json()
+      res.json(data)
+    } catch (error) {
+      console.error('Weather API error:', error)
+      res.status(500).json({ error: error.message })
+    }
+  })
 
 const PORT = 3001
 app.listen(PORT, () => {
