@@ -12,6 +12,7 @@ function App() {
   const [selectedView, setSelectedView] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [editingDate, setEditingDate] = useState(null)
   const [chatQuery, setChatQuery] = useState('')
   const [chatResponse, setChatResponse] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -19,6 +20,7 @@ function App() {
   const [formData, setFormData] = useState({
     title: '',
     summary: '',
+    url: '',
     categories: [],
     city: '',
     state: '',
@@ -127,12 +129,59 @@ function App() {
     setChatResponse('')
   }
 
+  // Handle edit button click
+  const handleEdit = (date) => {
+    setEditingDate(date)
+    setFormData({
+      title: date.ai?.title || '',
+      summary: date.ai?.summary || '',
+      url: date.url || '',
+      categories: date.ai?.categories || [],
+      city: date.ai?.location?.city || '',
+      state: date.ai?.location?.state || '',
+      costLevel: date.ai?.cost?.level || '$',
+      indoor: date.ai?.weather?.indoor || false,
+      outdoor: date.ai?.weather?.outdoor || false,
+      isSeasonalEvent: date.ai?.seasonal?.isEvent || false
+    })
+    setShowModal(true)
+  }
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setShowModal(false)
+    setEditingDate(null)
+    setFormData({
+      title: '',
+      summary: '',
+      url: '',
+      categories: [],
+      city: '',
+      state: '',
+      costLevel: '$',
+      indoor: false,
+      outdoor: false,
+      isSeasonalEvent: false
+    })
+  }
+
   // Render a date card component
-  const renderDateCard = (date) => (
+  const renderDateCard = (date, showEditButton = false) => (
     <div 
       key={date.id} 
-      className="bg-white rounded-lg shadow-md border border-gray-100 p-5 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex flex-col"
+      className="bg-white rounded-lg shadow-md border border-gray-100 p-5 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex flex-col relative"
     >
+      {/* Edit Button - Only in Browse Dates tab */}
+      {showEditButton && (
+        <button
+          onClick={() => handleEdit(date)}
+          className="absolute top-3 right-3 text-sm text-gray-500 hover:text-blue-600 transition-colors duration-200"
+          title="Edit date"
+        >
+          ✏️
+        </button>
+      )}
+      
       {/* Seasonal Event Warning Banner */}
       {date.ai?.seasonal?.isEvent === true && (
         <div className="bg-orange-50 text-orange-600 border-b border-orange-100 p-2 mb-2 rounded-t-lg -mx-5 -mt-5 px-5">
@@ -302,7 +351,7 @@ function App() {
                 return (
                   <div key={rec.id || index} className="space-y-3">
                     {/* Date Card */}
-                    {renderDateCard(date)}
+                    {renderDateCard(date, false)}
                     
                     {/* AI Reasoning */}
                     {rec.reason && (
@@ -340,10 +389,10 @@ function App() {
       return
     }
 
-    // Create new date object
-    const newDate = {
-      id: `custom-${Date.now()}`,
-      url: '',
+    // Create date object
+    const dateObject = {
+      id: editingDate ? editingDate.id : `custom-${Date.now()}`,
+      url: formData.url || '',
       caption: '',
       ai: {
         title: formData.title,
@@ -352,52 +401,53 @@ function App() {
         location: {
           city: formData.city,
           state: formData.state,
-          neighborhood: '',
-          isLocal: false,
-          driveTime: ''
+          neighborhood: editingDate?.ai?.location?.neighborhood || '',
+          isLocal: editingDate?.ai?.location?.isLocal || false,
+          driveTime: editingDate?.ai?.location?.driveTime || ''
         },
         time: {
-          duration: '',
-          timeOfDay: [],
-          bestTime: ''
+          duration: editingDate?.ai?.time?.duration || '',
+          timeOfDay: editingDate?.ai?.time?.timeOfDay || [],
+          bestTime: editingDate?.ai?.time?.bestTime || ''
         },
         cost: {
           level: formData.costLevel,
-          estimate: '',
-          notes: ''
+          estimate: editingDate?.ai?.cost?.estimate || '',
+          notes: editingDate?.ai?.cost?.notes || ''
         },
         weather: {
           indoor: formData.indoor,
           outdoor: formData.outdoor,
-          weatherDependent: false
+          weatherDependent: editingDate?.ai?.weather?.weatherDependent || false
         },
         seasonal: {
           isEvent: formData.isSeasonalEvent,
-          eventNotes: formData.isSeasonalEvent ? 'Custom seasonal event' : null,
-          bestSeasons: [],
+          eventNotes: formData.isSeasonalEvent ? (editingDate?.ai?.seasonal?.eventNotes || 'Custom seasonal event') : null,
+          bestSeasons: editingDate?.ai?.seasonal?.bestSeasons || [],
           yearRound: !formData.isSeasonalEvent
         }
       }
     }
 
-    // Add to custom dates and save to localStorage
-    const updatedCustomDates = [...customDates, newDate]
-    setCustomDates(updatedCustomDates)
-    localStorage.setItem('customDates', JSON.stringify(updatedCustomDates))
+    if (editingDate) {
+      // Update existing date
+      const updatedCustomDates = customDates.map(d => 
+        d.id === editingDate.id ? dateObject : d
+      )
+      setCustomDates(updatedCustomDates)
+      localStorage.setItem('customDates', JSON.stringify(updatedCustomDates))
+      
+      // Also update jsonDates if it's a custom date that was originally from JSON
+      // (This shouldn't happen, but handle it just in case)
+    } else {
+      // Add new date
+      const updatedCustomDates = [...customDates, dateObject]
+      setCustomDates(updatedCustomDates)
+      localStorage.setItem('customDates', JSON.stringify(updatedCustomDates))
+    }
 
     // Reset form and close modal
-    setFormData({
-      title: '',
-      summary: '',
-      categories: [],
-      city: '',
-      state: '',
-      costLevel: '$',
-      indoor: false,
-      outdoor: false,
-      isSeasonalEvent: false
-    })
-    setShowModal(false)
+    handleModalClose()
   }
 
   // Filter dates by view, category, and search
@@ -445,7 +495,22 @@ function App() {
             <h1 className="text-4xl font-bold text-gray-900">Date Ideas AI</h1>
             {activeTab === 'browse' && (
               <button
-                onClick={() => setShowModal(true)}
+                onClick={() => {
+                  setEditingDate(null)
+                  setFormData({
+                    title: '',
+                    summary: '',
+                    url: '',
+                    categories: [],
+                    city: '',
+                    state: '',
+                    costLevel: '$',
+                    indoor: false,
+                    outdoor: false,
+                    isSeasonalEvent: false
+                  })
+                  setShowModal(true)
+                }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-md"
               >
                 + Add Date
@@ -642,9 +707,11 @@ function App() {
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Add New Date Idea</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {editingDate ? 'Edit Date Idea' : 'Add New Date Idea'}
+                </h2>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={handleModalClose}
                   className="text-gray-400 hover:text-gray-600 text-2xl"
                 >
                   ×
@@ -678,6 +745,21 @@ function App() {
                     onChange={handleInputChange}
                     required
                     rows="3"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Instagram URL */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Instagram URL (optional)
+                  </label>
+                  <input
+                    type="url"
+                    name="url"
+                    value={formData.url}
+                    onChange={handleInputChange}
+                    placeholder="https://www.instagram.com/p/..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -797,7 +879,7 @@ function App() {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowModal(false)}
+                    onClick={handleModalClose}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-all duration-200"
                   >
                     Cancel
@@ -806,7 +888,7 @@ function App() {
                     type="submit"
                     className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-md"
                   >
-                    Save
+                    {editingDate ? 'Save Changes' : 'Save'}
                   </button>
                 </div>
               </form>
@@ -823,7 +905,7 @@ function App() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredDates.map(date => renderDateCard(date))}
+            {filteredDates.map(date => renderDateCard(date, true))}
           </div>
         )}
       </div>
