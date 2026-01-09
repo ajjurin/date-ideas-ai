@@ -123,10 +123,172 @@ function App() {
     }
   }
 
+  // Handle follow-up action buttons
+  const handleFollowUp = async (query) => {
+    setChatQuery(query)
+    setIsLoading(true)
+    setChatResponse('')
+    
+    try {
+      const response = await getRecommendations(query, dates)
+      console.log('📥 Raw AI Response:', response)
+      console.log('📥 Response type:', typeof response)
+      console.log('📥 Response length:', response?.length)
+      setChatResponse(response)
+    } catch (error) {
+      console.error('❌ Error getting recommendations:', error)
+      setChatResponse(`Error: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   // Clear chat response
   const clearChat = () => {
     setChatQuery('')
     setChatResponse('')
+  }
+
+  // Generate contextual follow-up buttons based on query and recommendations
+  const generateContextualButtons = (query, recommendations) => {
+    const buttons = []
+    const queryLower = query.toLowerCase()
+    
+    // Get recommendation data
+    const recDates = recommendations
+      .map(rec => dates.find(d => d.id === rec.id))
+      .filter(Boolean)
+    
+    if (recDates.length === 0) return []
+    
+    // Analyze recommendations
+    const categories = new Set()
+    const costLevels = new Set()
+    let hasIndoor = false
+    let hasOutdoor = false
+    let hasLocal = false
+    let hasDayTrip = false
+    let hasFood = false
+    let hasRomantic = false
+    let hasActive = false
+    let hasCreative = false
+    
+    recDates.forEach(date => {
+      // Categories
+      date.ai?.categories?.forEach(cat => categories.add(cat))
+      if (date.ai?.categories?.includes('food')) hasFood = true
+      if (date.ai?.categories?.includes('romantic')) hasRomantic = true
+      if (date.ai?.categories?.includes('active')) hasActive = true
+      if (date.ai?.categories?.includes('creative')) hasCreative = true
+      
+      // Cost
+      if (date.ai?.cost?.level) costLevels.add(date.ai.cost.level)
+      
+      // Weather
+      if (date.ai?.weather?.indoor) hasIndoor = true
+      if (date.ai?.weather?.outdoor) hasOutdoor = true
+      
+      // Location
+      if (date.ai?.location?.isLocal) hasLocal = true
+      if (date.ai?.location?.driveTime === 'day-trip') hasDayTrip = true
+    })
+    
+    // Analyze query for context
+    const isRainy = queryLower.includes('rain') || queryLower.includes('rainy') || queryLower.includes('wet')
+    const isSunny = queryLower.includes('sunny') || queryLower.includes('sun')
+    const mentionsIndoor = queryLower.includes('indoor')
+    const mentionsOutdoor = queryLower.includes('outdoor')
+    const mentionsCheap = queryLower.includes('cheap') || queryLower.includes('budget') || queryLower.includes('affordable') || queryLower.includes('free')
+    const mentionsExpensive = queryLower.includes('expensive') || queryLower.includes('splurge') || queryLower.includes('luxury')
+    const mentionsRomantic = queryLower.includes('romantic') || queryLower.includes('romance')
+    const mentionsActive = queryLower.includes('active') || queryLower.includes('exercise') || queryLower.includes('sport')
+    const mentionsFood = queryLower.includes('food') || queryLower.includes('restaurant') || queryLower.includes('dining') || queryLower.includes('eat')
+    const mentionsCreative = queryLower.includes('creative') || queryLower.includes('art') || queryLower.includes('craft')
+    const mentionsNearby = queryLower.includes('nearby') || queryLower.includes('local') || queryLower.includes('close')
+    const mentionsDayTrip = queryLower.includes('day trip') || queryLower.includes('day-trip') || queryLower.includes('drive')
+    
+    // Generate contextual buttons
+    
+    // Cost-related buttons
+    const hasExpensive = costLevels.has('$$$') || costLevels.has('$$')
+    const hasCheap = costLevels.has('free') || costLevels.has('$')
+    
+    if (hasExpensive && !mentionsCheap) {
+      buttons.push({ text: '💰 Show Cheaper Options', query: 'Show cheaper options' })
+    }
+    if (hasCheap && !mentionsExpensive && !queryLower.includes('cheap')) {
+      buttons.push({ text: '💎 More Upscale Options', query: 'Show more upscale or splurge-worthy date ideas' })
+    }
+    
+    // Weather/Indoor-Outdoor buttons
+    if ((isRainy || mentionsIndoor || hasIndoor) && !hasOutdoor && !mentionsOutdoor) {
+      buttons.push({ text: '☀️ Outdoor Options', query: 'Show outdoor date ideas' })
+    }
+    if ((isSunny || mentionsOutdoor || hasOutdoor) && !hasIndoor && !mentionsIndoor) {
+      buttons.push({ text: '🏠 Indoor Activities', query: 'Show indoor date ideas' })
+    }
+    
+    // Category-specific buttons
+    if (hasFood && !mentionsFood) {
+      buttons.push({ text: '🍽️ More Food Options', query: 'Show more food and dining date ideas' })
+    }
+    if (!hasFood && !mentionsFood) {
+      buttons.push({ text: '🍽️ Food Options', query: 'Show food and dining date ideas' })
+    }
+    
+    if (hasRomantic && !mentionsRomantic) {
+      buttons.push({ text: '💕 More Romantic Ideas', query: 'Show more romantic date ideas' })
+    }
+    if (!hasRomantic && !mentionsRomantic) {
+      buttons.push({ text: '💕 Romantic Dates', query: 'Show romantic date ideas' })
+    }
+    
+    if (hasActive && !mentionsActive) {
+      buttons.push({ text: '🏃 More Active Dates', query: 'Show more active and physical date ideas' })
+    }
+    if (!hasActive && !mentionsActive) {
+      buttons.push({ text: '🏃 Active Dates', query: 'Show active and physical date ideas' })
+    }
+    
+    if (hasCreative && !mentionsCreative) {
+      buttons.push({ text: '🎨 More Creative Activities', query: 'Show more creative and artistic date ideas' })
+    }
+    if (!hasCreative && !mentionsCreative) {
+      buttons.push({ text: '🎨 Creative Activities', query: 'Show creative and artistic date ideas' })
+    }
+    
+    // Location buttons
+    if (hasLocal && !hasDayTrip && !mentionsDayTrip) {
+      buttons.push({ text: '🚗 Day Trip Ideas', query: 'Show day trip date ideas' })
+    }
+    if (hasDayTrip && !hasLocal && !mentionsNearby) {
+      buttons.push({ text: '🏠 Nearby Only', query: 'Show local and nearby date ideas' })
+    }
+    if (!hasLocal && !hasDayTrip && !mentionsNearby) {
+      buttons.push({ text: '🏠 Nearby Options', query: 'Show local and nearby date ideas' })
+    }
+    
+    // Time-based buttons (if query mentions time)
+    if (queryLower.includes('morning')) {
+      buttons.push({ text: '🌆 Evening Options', query: 'Show evening date ideas' })
+    }
+    if (queryLower.includes('evening') || queryLower.includes('night')) {
+      buttons.push({ text: '🌅 Morning Options', query: 'Show morning date ideas' })
+    }
+    
+    // Category alternatives (if specific category is dominant)
+    if (categories.size === 1) {
+      const dominantCategory = Array.from(categories)[0]
+      if (dominantCategory === 'food') {
+        buttons.push({ text: '🎭 Non-Food Activities', query: 'Show date ideas that are not food-related' })
+      }
+      if (dominantCategory === 'romantic') {
+        buttons.push({ text: '👥 Casual Dates', query: 'Show casual and non-romantic date ideas' })
+      }
+    }
+    
+    // Limit to 6 buttons max
+    return buttons.slice(0, 6)
   }
 
   // Handle edit button click
@@ -366,6 +528,27 @@ function App() {
               })}
             </div>
           </div>
+
+          {/* Follow-up Action Buttons */}
+          {(() => {
+            const contextualButtons = generateContextualButtons(chatQuery, parsedResponse.recommendations)
+            if (contextualButtons.length === 0) return null
+            
+            return (
+              <div className="flex flex-wrap justify-center gap-2 pt-4 border-t border-gray-200">
+                {contextualButtons.map((button, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleFollowUp(button.query)}
+                    disabled={isLoading}
+                    className="px-4 py-2 text-sm rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {button.text}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       )
     }
