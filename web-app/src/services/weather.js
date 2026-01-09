@@ -1,6 +1,6 @@
 export async function getCurrentWeather() {
     try {
-      const response = await fetch('http://localhost:3001/api/weather')
+      const response = await fetch('/.netlify/functions/weather')
       const data = await response.json()
       
       if (data.cod !== 200) {

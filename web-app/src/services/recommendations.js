@@ -240,7 +240,7 @@ export async function getRecommendations(query, allDates) {
     NOW RESPOND WITH JSON ONLY:`
   
       // Call Claude API via proxy
-      const response = await fetch('http://localhost:3001/api/recommend', {
+      const response = await fetch('/.netlify/functions/recommend', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
